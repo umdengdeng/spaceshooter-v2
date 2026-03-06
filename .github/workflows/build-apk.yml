@@ -13,60 +13,67 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.6.1
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check Godot version
-        run: godot --version 2>&1 || echo "godot not found in PATH"
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
 
-      - name: Setup Android SDK and export templates
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fontconfig libfontconfig1 wget unzip
+
+      - name: Download Godot
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -O godot.zip
+          unzip -o godot.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot || sudo mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Download export templates
         run: |
           mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
-          cd ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
-          TEMPLATES_URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-          echo "Downloading templates from: ${TEMPLATES_URL}"
-          wget -q "${TEMPLATES_URL}" -O templates.tpz
-          ls -la templates.tpz
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -O templates.tpz
           unzip -o templates.tpz
-          mv templates/* . 2>/dev/null || true
+          mv templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
           rm -rf templates templates.tpz
-          echo "=== Template files ==="
-          ls -la
-          mkdir -p /root/.config/godot
-          cat > /root/.config/godot/editor_settings-4.tres << 'EDITOR'
+          echo "=== Export templates ==="
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ | head -20
+
+      - name: Create debug keystore
+        run: |
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey \
+            -keypass android -keystore $PWD/debug.keystore \
+            -storepass android -dname "CN=Android Debug,O=Android,C=US" \
+            -validity 9999
+          ls -la $PWD/debug.keystore
+
+      - name: Configure Godot editor settings
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          mkdir -p ~/.config/godot/
+          cat > ~/.config/godot/editor_settings-4.tres << EOF
           [gd_resource type="EditorSettings"]
           [resource]
-          export/android/android_sdk_path = "/usr/lib/android-sdk"
-          export/android/debug_keystore = "/root/debug.keystore"
-          EDITOR
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey \
-            -keypass android -keystore /root/debug.keystore \
-            -storepass android -dname "CN=Android Debug,O=Android,C=US" \
-            -validity 9999 2>/dev/null || true
-
-      - name: List export templates
-        run: |
-          echo "=== Export Templates Directory ==="
-          ls -la ~/.local/share/godot/export_templates/ 2>/dev/null || true
-          ls -la ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ 2>/dev/null || true
-          echo "=== Android related files ==="
-          find ~/.local/share/godot -name "android*" 2>/dev/null || true
-          echo "=== Debug keystore ==="
-          ls -la /root/debug.keystore 2>/dev/null || echo "No debug keystore"
-          echo "=== Android SDK ==="
-          ls -la /usr/lib/android-sdk/ 2>/dev/null || echo "No Android SDK at /usr/lib/android-sdk"
-          which adb 2>/dev/null || echo "adb not found"
-
-      - name: Check project
-        run: |
-          echo "=== project.godot ==="
-          cat project.godot | head -30
-          echo "=== Project files ==="
-          find . -name "*.tscn" -o -name "*.gd" | head -20
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/debug_keystore = "$PWD/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          echo "=== Editor settings ==="
+          cat ~/.config/godot/editor_settings-4.tres
 
       - name: Create export preset
         run: |
@@ -119,25 +126,25 @@ jobs:
           version/code=1
           version/name="1.0.0"
           PRESET
-          echo "=== export_presets.cfg ==="
-          cat export_presets.cfg
 
       - name: Import project
         run: |
           godot --headless --import 2>&1 || true
           sleep 3
 
-      - name: Build APK with full log
+      - name: Build APK
         continue-on-error: true
         run: |
           mkdir -p build
-          echo "=== Starting build ==="
           godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
-          echo "=== Build exit code: $? ==="
-          echo "=== build/ contents ==="
-          ls -la build/ 2>/dev/null || echo "build/ empty or missing"
-          echo "=== Find all APK files ==="
-          find / -name "*.apk" -type f 2>/dev/null || echo "No APK found anywhere"
+          echo "=== Build result ==="
+          ls -la build/ 2>/dev/null || echo "build/ empty"
+
+      - name: Find APK
+        if: always()
+        run: |
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK in workspace"
+          find /home -name "*.apk" -type f 2>/dev/null || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -180,4 +187,4 @@ jobs:
         if: env.SMTP_SERVER == ''
         env:
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-        run: echo "Email secrets not configured - skipping notification. Download APK from Artifacts or Releases."
+        run: echo "Email secrets not configured - skipping notification."
