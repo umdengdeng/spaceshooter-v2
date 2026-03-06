@@ -36,7 +36,7 @@ jobs:
         run: |
           wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -O godot.zip
           unzip -o godot.zip
-          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot || sudo mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot
+          sudo mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot
           sudo chmod +x /usr/local/bin/godot
           godot --version
 
@@ -47,16 +47,21 @@ jobs:
           unzip -o templates.tpz
           mv templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
           rm -rf templates templates.tpz
-          echo "=== Export templates ==="
-          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ | head -20
+          echo "=== Template folder ==="
+          ls ~/.local/share/godot/export_templates/
+          echo "=== Template files (android) ==="
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/android* 2>/dev/null || echo "no android templates"
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ | grep -i android || echo "no android match"
 
       - name: Create debug keystore
         run: |
           keytool -keyalg RSA -genkeypair -alias androiddebugkey \
-            -keypass android -keystore $PWD/debug.keystore \
+            -keypass android -keystore ${GITHUB_WORKSPACE}/debug.keystore \
             -storepass android -dname "CN=Android Debug,O=Android,C=US" \
             -validity 9999
-          ls -la $PWD/debug.keystore
+          echo "=== Keystore ==="
+          ls -la ${GITHUB_WORKSPACE}/debug.keystore
+          keytool -list -keystore ${GITHUB_WORKSPACE}/debug.keystore -storepass android 2>&1 || true
 
       - name: Configure Godot editor settings
         run: |
@@ -68,7 +73,7 @@ jobs:
           [resource]
           export/android/java_sdk_path = "$JAVA_HOME"
           export/android/android_sdk_path = "$ANDROID_HOME"
-          export/android/debug_keystore = "$PWD/debug.keystore"
+          export/android/debug_keystore = "${GITHUB_WORKSPACE}/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
@@ -88,9 +93,12 @@ jobs:
           export_filter="all_resources"
           include_filter=""
           exclude_filter=""
-          export_path="build/SpaceShooter.apk"
+          export_path=""
+          patches=[]
           encryption_include_filters=""
           encryption_exclude_filters=""
+          seed=0
+          script_export_mode=1
 
           [preset.0.options]
 
@@ -101,12 +109,18 @@ jobs:
           gradle_build/export_format=0
           architectures/armeabi-v7a=true
           architectures/arm64-v8a=true
-          architectures/x86=false
-          architectures/x86_64=false
-          package/unique_name="com.spaceshooter.game"
+          keystore/debug=""
+          keystore/debug_user=""
+          keystore/debug_password=""
+          keystore/release=""
+          keystore/release_user=""
+          keystore/release_password=""
+          version/code=1
+          version/name="1.0.0"
+          package/unique_name="com.game.spaceshooter"
           package/name="SpaceShooter"
           package/signed=true
-          package/app_category=0
+          package/classify_as_game=true
           package/retain_data_on_uninstall=false
           package/exclude_from_recents=false
           package/show_in_android_tv=false
@@ -123,28 +137,49 @@ jobs:
           screen/support_large=true
           screen/support_xlarge=true
           user_permissions/0="android.permission.INTERNET"
-          version/code=1
-          version/name="1.0.0"
+          command_line/extra_args=""
+          apk_expansion/enable=false
+          apk_expansion/SALT=""
+          apk_expansion/public_key=""
+          permissions/internet=true
           PRESET
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
 
       - name: Import project
         run: |
           godot --headless --import 2>&1 || true
           sleep 3
 
+      - name: Debug export config
+        run: |
+          echo "=== Java ==="
+          java -version 2>&1
+          echo "=== Android SDK build-tools ==="
+          ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "no build-tools"
+          echo "=== Android SDK platforms ==="
+          ls -la $ANDROID_HOME/platforms/ 2>/dev/null || echo "no platforms"
+          echo "=== Template folder check ==="
+          ls ~/.local/share/godot/export_templates/
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ | head -10
+          echo "=== Dry run verbose ==="
+          godot --headless --export-debug "Android" /dev/null --verbose 2>&1 | tail -50 || true
+
       - name: Build APK
         continue-on-error: true
         run: |
           mkdir -p build
           godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
-          echo "=== Build result ==="
-          ls -la build/ 2>/dev/null || echo "build/ empty"
+          echo "Exit code: $?"
 
       - name: Find APK
         if: always()
         run: |
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK in workspace"
-          find /home -name "*.apk" -type f 2>/dev/null || true
+          echo "=== build/ ==="
+          ls -la build/ 2>/dev/null || echo "build/ empty"
+          echo "=== Find APK anywhere ==="
+          find $GITHUB_WORKSPACE -name "*.apk" -type f 2>/dev/null || echo "No APK"
+          find /tmp -name "*.apk" -type f 2>/dev/null || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -187,4 +222,4 @@ jobs:
         if: env.SMTP_SERVER == ''
         env:
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-        run: echo "Email secrets not configured - skipping notification."
+        run: echo "Email secrets not configured - skipping."
