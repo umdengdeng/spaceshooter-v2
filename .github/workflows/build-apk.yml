@@ -69,18 +69,19 @@ jobs:
           # Editor settings (try both possible filenames)
           mkdir -p /root/.config/godot
           for fname in editor_settings-4.tres editor_settings-4.6.tres; do
-            printf '[gd_resource type="EditorSettings"]\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "/root/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "/root/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
               "$JAVA_PATH" "$ANDROID_PATH" \
               > "/root/.config/godot/$fname"
           done
           echo "=== Editor settings ==="
           cat /root/.config/godot/editor_settings-4.tres
 
-          # Verify export_presets.cfg from repo
+          # Fix line endings on export_presets.cfg (in case of CRLF from Windows)
+          sed -i 's/\r$//' export_presets.cfg
           echo "=== export_presets.cfg ==="
           cat export_presets.cfg
-          echo "=== hex check first line ==="
-          head -1 export_presets.cfg | xxd | head -2
+          echo "=== line ending check ==="
+          od -c export_presets.cfg | head -3
 
       - name: Import project
         run: |
