@@ -6,108 +6,52 @@ on:
   workflow_dispatch:
 
 jobs:
-  diagnose:
+  build:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.6.1
 
+    env:
+      HOME: /root
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Diagnose container environment
+      - name: Setup
         run: |
-          echo "===== 1. BASIC ENV ====="
-          echo "HOME=$HOME"
-          echo "USER=$(whoami)"
-          echo "PWD=$PWD"
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          env | grep -i -E "godot|android|java|sdk" || echo "(no matching env vars)"
+          apt-get update && apt-get install -y fontconfig libfontconfig1 2>/dev/null || true
+          sed -i 's/\r$//' export_presets.cfg
 
-          echo ""
-          echo "===== 2. GODOT BINARY ====="
-          which godot 2>/dev/null || echo "godot not in PATH"
-          godot --version 2>/dev/null || echo "godot --version failed"
-          ls -la $(which godot 2>/dev/null) 2>/dev/null || true
-
-          echo ""
-          echo "===== 3. EXPORT TEMPLATES ====="
-          echo "--- All template directories ---"
-          find / -path "*/export_templates/*" -type d 2>/dev/null | head -10
-          echo "--- Android template files ---"
-          find / -name "android_debug.apk" 2>/dev/null
-          find / -name "android_release.apk" 2>/dev/null
-          echo "--- Template version folders ---"
-          ls -la /root/.local/share/godot/export_templates/ 2>/dev/null || echo "not at /root"
-          ls -la /home/*/.local/share/godot/export_templates/ 2>/dev/null || echo "not at /home/*"
-          ls -la /github/home/.local/share/godot/export_templates/ 2>/dev/null || echo "not at /github/home"
-
-          echo ""
-          echo "===== 4. JAVA ====="
-          which java 2>/dev/null && java -version 2>&1 || echo "java not found"
-          which javac 2>/dev/null && javac -version 2>&1 || echo "javac not found"
-          echo "--- JVM directories ---"
-          ls -la /usr/lib/jvm/ 2>/dev/null || echo "no /usr/lib/jvm"
-          echo "--- Check bin/javac in each ---"
-          for d in /usr/lib/jvm/*/; do
-            echo "$d : $(ls $d/bin/javac 2>/dev/null || echo 'NO javac')"
-          done
-
-          echo ""
-          echo "===== 5. ANDROID SDK ====="
-          echo "--- Candidate paths ---"
-          for p in /usr/lib/android-sdk /root/android-sdk /opt/android-sdk /sdk /android-sdk; do
-            if [ -d "$p" ]; then
-              echo "FOUND: $p"
-              echo "  build-tools: $(ls $p/build-tools/ 2>/dev/null || echo 'none')"
-              echo "  platforms: $(ls $p/platforms/ 2>/dev/null || echo 'none')"
-              echo "  platform-tools: $(ls $p/platform-tools/adb 2>/dev/null || echo 'no adb')"
-              echo "  d8: $(find $p -name 'd8' -type f 2>/dev/null | head -1 || echo 'not found')"
-            fi
-          done
-
-          echo ""
-          echo "===== 6. EXISTING GODOT CONFIG ====="
-          echo "--- /root/.config/godot/ ---"
-          ls -la /root/.config/godot/ 2>/dev/null || echo "not found"
-          echo "--- Existing editor_settings files ---"
-          find /root -name "editor_settings*" 2>/dev/null
-          find /github -name "editor_settings*" 2>/dev/null || true
-          echo "--- Content of any existing editor_settings ---"
-          for f in $(find /root -name "editor_settings*" 2>/dev/null); do
-            echo "=== $f ==="
-            cat "$f"
-          done
-
-          echo ""
-          echo "===== 7. KEYTOOL ====="
-          which keytool 2>/dev/null && keytool 2>&1 | head -1 || echo "keytool not found"
-
-          echo ""
-          echo "===== 8. PROJECT FILES ====="
-          echo "--- project.godot exists ---"
-          ls -la project.godot 2>/dev/null || echo "NOT FOUND"
-          echo "--- export_presets.cfg exists ---"
-          ls -la export_presets.cfg 2>/dev/null || echo "NOT FOUND"
-          echo "--- export_presets.cfg content ---"
-          cat export_presets.cfg 2>/dev/null || echo "cannot read"
-          echo "--- file type ---"
-          file export_presets.cfg 2>/dev/null || true
-
-          echo ""
-          echo "===== 9. GODOT IMPORT TEST ====="
+      - name: Import project
+        run: |
           godot --headless --import 2>&1 || true
+          sleep 2
 
-          echo ""
-          echo "===== 10. EDITOR SETTINGS AFTER IMPORT ====="
-          echo "--- Find all editor_settings after import ---"
-          find / -name "editor_settings*" -not -path "*/proc/*" 2>/dev/null
-          for f in $(find / -name "editor_settings*" -not -path "*/proc/*" 2>/dev/null); do
-            echo "=== $f ==="
-            cat "$f" 2>/dev/null | head -20
-          done
+      - name: Build APK
+        run: |
+          mkdir -p build
+          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
 
-          echo ""
-          echo "===== 11. DRY RUN EXPORT ====="
-          godot --headless --export-debug "Android" /dev/null 2>&1 || true
+      - name: Verify
+        if: always()
+        run: |
+          if [ -f build/SpaceShooter.apk ]; then
+            echo "APK 빌드 성공! $(du -h build/SpaceShooter.apk | cut -f1)"
+          else
+            echo "APK 빌드 실패"
+            exit 1
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpaceShooter-APK
+          path: build/SpaceShooter.apk
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/SpaceShooter.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
