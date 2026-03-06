@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://stage_banner"]
+
+[ext_resource type="Script" path="res://scripts/effects/stage_banner.gd" id="1_banner"]
+
+[node name="StageBanner" type="Label"]
+script = ExtResource("1_banner")

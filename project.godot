@@ -1,0 +1,44 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
+[application]
+
+config/name="SpaceShooter"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.6")
+
+[autoload]
+
+GameManager="*res://scripts/autoload/game_manager.gd"
+SaveManager="*res://scripts/autoload/save_manager.gd"
+CharacterDB="*res://scripts/data/character_db.gd"
+GachaSystem="*res://scripts/systems/gacha_system.gd"
+UpgradeSystem="*res://scripts/systems/upgrade_system.gd"
+
+[debug]
+
+gdscript/warnings/treat_warnings_as_errors=false
+
+[display]
+
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/size/window_width_override=540
+window/size/window_height_override=960
+window/stretch/mode="canvas_items"
+window/handheld/orientation="portrait"
+
+[rendering]
+
+renderer/rendering_method="mobile"

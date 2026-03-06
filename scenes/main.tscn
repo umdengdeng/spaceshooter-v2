@@ -1,0 +1,167 @@
+[gd_scene load_steps=4 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/battle/player_party.tscn" id="2_party"]
+[ext_resource type="Script" path="res://scripts/battle/stage_system.gd" id="3_stage"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.05, 0.05, 0.1, 1)
+
+[node name="TopBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+offset_top = 20.0
+offset_bottom = 80.0
+
+[node name="StageLabel" type="Label" parent="TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Stage 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="GoldLabel" type="Label" parent="TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Gold: 0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DiamondLabel" type="Label" parent="TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "💎: 0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BossHPBar" type="ProgressBar" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+offset_left = 100.0
+offset_top = 85.0
+offset_right = -100.0
+offset_bottom = 105.0
+value = 100.0
+show_percentage = false
+
+[node name="StageSystem" type="Node" parent="." groups=["battle"]]
+unique_name_in_owner = true
+script = ExtResource("3_stage")
+
+[node name="PlayerParty" parent="." instance=ExtResource("2_party")]
+unique_name_in_owner = true
+
+[node name="BottomUI" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="BottomBar" type="HBoxContainer" parent="BottomUI"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -120.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="CharacterButton" type="Button" parent="BottomUI/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Character"
+
+[node name="ShopButton" type="Button" parent="BottomUI/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Shop"
+
+[node name="GachaButton" type="Button" parent="BottomUI/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Gacha"
+
+[node name="DungeonButton" type="Button" parent="BottomUI/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Dungeon"
+
+[node name="AutoButton" type="Button" parent="BottomUI"]
+unique_name_in_owner = true
+anchors_preset = 0
+offset_left = 920.0
+offset_top = 1720.0
+offset_right = 1060.0
+offset_bottom = 1780.0
+text = "AUTO"
+
+[node name="PopupLayer" type="CanvasLayer" parent="."]
+unique_name_in_owner = true
+layer = 20
+
+[node name="PopupPanel" type="Panel" parent="PopupLayer"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -400.0
+offset_top = -600.0
+offset_right = 400.0
+offset_bottom = 600.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PopupTitleLabel" type="Label" parent="PopupLayer/PopupPanel"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+offset_top = 20.0
+offset_bottom = 70.0
+text = "Popup"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CloseButton" type="Button" parent="PopupLayer/PopupPanel"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+grow_horizontal = 0
+offset_left = -80.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 60.0
+text = "X"
+
+[connection signal="pressed" from="BottomUI/BottomBar/CharacterButton" to="." method="_on_character_button_pressed"]
+[connection signal="pressed" from="BottomUI/BottomBar/ShopButton" to="." method="_on_shop_button_pressed"]
+[connection signal="pressed" from="BottomUI/BottomBar/GachaButton" to="." method="_on_gacha_button_pressed"]
+[connection signal="pressed" from="BottomUI/BottomBar/DungeonButton" to="." method="_on_dungeon_button_pressed"]
+[connection signal="pressed" from="BottomUI/AutoButton" to="." method="_on_auto_button_pressed"]
+[connection signal="pressed" from="PopupLayer/PopupPanel/CloseButton" to="." method="_on_close_button_pressed"]

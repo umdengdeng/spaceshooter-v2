@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3 uid="uid://character_unit"]
+
+[ext_resource type="Script" path="res://scripts/battle/character_unit.gd" id="1_char"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_1"]
+radius = 25.0
+
+[node name="CharacterUnit" type="Area2D" groups=["battle"]]
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("1_char")
+
+[node name="ShipShape" type="Polygon2D" parent="."]
+color = Color(1, 0.2, 0.1, 1)
+polygon = PackedVector2Array(0, -28, 20, 12, 8, 4, 0, 10, -8, 4, -20, 12)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_1")
+
+[node name="HPBar" type="ProgressBar" parent="."]
+offset_left = -22.0
+offset_top = 18.0
+offset_right = 22.0
+offset_bottom = 25.0
+value = 100.0
+show_percentage = false

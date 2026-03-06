@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3 uid="uid://player_party"]
+
+[ext_resource type="PackedScene" path="res://scenes/battle/character_unit.tscn" id="1_unit"]
+[ext_resource type="Script" path="res://scripts/battle/player_party.gd" id="2_party"]
+
+[node name="PlayerParty" type="Node2D" groups=["battle"]]
+script = ExtResource("2_party")
+
+[node name="LeaderUnit" parent="." instance=ExtResource("1_unit")]
+unique_name_in_owner = true
+position = Vector2(540, 1600)
+
+[node name="Crown" type="Label" parent="LeaderUnit"]
+offset_left = -20.0
+offset_top = -48.0
+offset_right = 20.0
+offset_bottom = -28.0
+theme_override_font_sizes/font_size = 22
+text = "♛"
+horizontal_alignment = 1
+
+[node name="LeftUnit" parent="." instance=ExtResource("1_unit")]
+unique_name_in_owner = true
+position = Vector2(420, 1680)
+
+[node name="RightUnit" parent="." instance=ExtResource("1_unit")]
+unique_name_in_owner = true
+position = Vector2(660, 1680)
