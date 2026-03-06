@@ -20,17 +20,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Godot version
+        run: godot --version 2>&1 || echo "godot not found in PATH"
+
       - name: Setup Android SDK and export templates
         run: |
           mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           cd ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           TEMPLATES_URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-          wget -q "${TEMPLATES_URL}" -O templates.tpz || true
-          if [ -f templates.tpz ]; then
-            unzip -o templates.tpz
-            mv templates/* . 2>/dev/null || true
-            rm -rf templates templates.tpz
-          fi
+          echo "Downloading templates from: ${TEMPLATES_URL}"
+          wget -q "${TEMPLATES_URL}" -O templates.tpz
+          ls -la templates.tpz
+          unzip -o templates.tpz
+          mv templates/* . 2>/dev/null || true
+          rm -rf templates templates.tpz
+          echo "=== Template files ==="
+          ls -la
           mkdir -p /root/.config/godot
           cat > /root/.config/godot/editor_settings-4.tres << 'EDITOR'
           [gd_resource type="EditorSettings"]
@@ -43,17 +48,31 @@ jobs:
             -storepass android -dname "CN=Android Debug,O=Android,C=US" \
             -validity 9999 2>/dev/null || true
 
-      - name: Import project
+      - name: List export templates
         run: |
-          cd ${GITHUB_WORKSPACE}
-          godot --headless --import --quit 2>&1 || true
-          sleep 2
+          echo "=== Export Templates Directory ==="
+          ls -la ~/.local/share/godot/export_templates/ 2>/dev/null || true
+          ls -la ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/ 2>/dev/null || true
+          echo "=== Android related files ==="
+          find ~/.local/share/godot -name "android*" 2>/dev/null || true
+          echo "=== Debug keystore ==="
+          ls -la /root/debug.keystore 2>/dev/null || echo "No debug keystore"
+          echo "=== Android SDK ==="
+          ls -la /usr/lib/android-sdk/ 2>/dev/null || echo "No Android SDK at /usr/lib/android-sdk"
+          which adb 2>/dev/null || echo "adb not found"
+
+      - name: Check project
+        run: |
+          echo "=== project.godot ==="
+          cat project.godot | head -30
+          echo "=== Project files ==="
+          find . -name "*.tscn" -o -name "*.gd" | head -20
 
       - name: Create export preset
         run: |
-          cd ${GITHUB_WORKSPACE}
           cat > export_presets.cfg << 'PRESET'
           [preset.0]
+
           name="Android"
           platform="Android"
           runnable=true
@@ -62,30 +81,63 @@ jobs:
           export_filter="all_resources"
           include_filter=""
           exclude_filter=""
-          export_path="build/android/${EXPORT_NAME}.apk"
+          export_path="build/SpaceShooter.apk"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
 
           [preset.0.options]
+
+          custom_template/debug=""
+          custom_template/release=""
+          gradle_build/use_gradle_build=false
+          gradle_build/compress_native_libraries=true
+          gradle_build/export_format=0
+          architectures/armeabi-v7a=true
+          architectures/arm64-v8a=true
+          architectures/x86=false
+          architectures/x86_64=false
           package/unique_name="com.spaceshooter.game"
           package/name="SpaceShooter"
-          version/name="1.0.0"
+          package/signed=true
+          package/app_category=0
+          package/retain_data_on_uninstall=false
+          package/exclude_from_recents=false
+          package/show_in_android_tv=false
+          package/show_in_app_library=true
+          package/show_as_launcher_app=false
+          launcher_icons/main_192x192=""
+          launcher_icons/adaptive_foreground_432x432=""
+          launcher_icons/adaptive_background_432x432=""
+          graphics/opengl_debug=false
+          xr_features/xr_mode=0
+          screen/immersive_mode=true
+          screen/support_small=true
+          screen/support_normal=true
+          screen/support_large=true
+          screen/support_xlarge=true
+          user_permissions/0="android.permission.INTERNET"
           version/code=1
-          screen/orientation=1
+          version/name="1.0.0"
           PRESET
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
 
-      - name: Build APK
+      - name: Import project
         run: |
-          cd ${GITHUB_WORKSPACE}
+          godot --headless --import 2>&1 || true
+          sleep 3
+
+      - name: Build APK with full log
+        continue-on-error: true
+        run: |
           mkdir -p build
-          godot --headless --export-debug "Android" ./build/SpaceShooter.apk 2>&1 || true
-
-      - name: Find APK
-        run: |
-          echo "=== APK files in build/ ==="
-          find ./build -name "*.apk" -type f 2>/dev/null || true
-          echo "=== APK files anywhere ==="
-          find ${GITHUB_WORKSPACE} -name "*.apk" -type f 2>/dev/null || true
-          find /root -name "*.apk" -type f 2>/dev/null || true
-          find /home -name "*.apk" -type f 2>/dev/null || true
+          echo "=== Starting build ==="
+          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
+          echo "=== Build exit code: $? ==="
+          echo "=== build/ contents ==="
+          ls -la build/ 2>/dev/null || echo "build/ empty or missing"
+          echo "=== Find all APK files ==="
+          find / -name "*.apk" -type f 2>/dev/null || echo "No APK found anywhere"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
