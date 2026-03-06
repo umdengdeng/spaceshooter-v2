@@ -11,25 +11,21 @@ jobs:
     container:
       image: barichello/godot-ci:4.6.1
 
+    env:
+      HOME: /root
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup
         run: |
-          # Install fontconfig + JDK
-          apt-get update && apt-get install -y fontconfig libfontconfig1 default-jdk-headless 2>/dev/null || true
+          # Install fontconfig
+          apt-get update && apt-get install -y fontconfig libfontconfig1 2>/dev/null || true
 
-          # Templates: copy from /root to $HOME
-          TEMPLATE_SRC="/root/.local/share/godot/export_templates/4.6.1.stable"
-          TEMPLATE_DST="$HOME/.local/share/godot/export_templates/4.6.1.stable"
-          mkdir -p "$TEMPLATE_DST"
-          if [ -d "$TEMPLATE_SRC" ]; then
-            cp -r "$TEMPLATE_SRC"/* "$TEMPLATE_DST"/
-            echo "Templates copied from $TEMPLATE_SRC"
-          fi
-          ls "$TEMPLATE_DST"/android* 2>/dev/null || echo "WARNING: no android templates"
+          # Verify templates exist (already at /root in this image)
+          ls /root/.local/share/godot/export_templates/4.6.1.stable/android_debug.apk && echo "Templates OK"
 
-          # Find Java SDK (need dir with bin/javac)
+          # Find Java SDK
           JAVA_PATH=""
           for p in /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/default-java; do
             if [ -f "$p/bin/javac" ]; then
@@ -37,11 +33,17 @@ jobs:
               break
             fi
           done
+          # Fallback: install JDK if not found
           if [ -z "$JAVA_PATH" ]; then
-            JAVA_PATH=$(dirname $(dirname $(readlink -f $(which javac 2>/dev/null) 2>/dev/null) 2>/dev/null) 2>/dev/null || echo "")
+            apt-get install -y default-jdk-headless 2>/dev/null || true
+            for p in /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/default-java; do
+              if [ -f "$p/bin/javac" ]; then
+                JAVA_PATH="$p"
+                break
+              fi
+            done
           fi
           echo "Java SDK: $JAVA_PATH"
-          ls "$JAVA_PATH/bin/javac" 2>/dev/null && echo "javac OK" || echo "WARNING: javac not found"
 
           # Find Android SDK
           ANDROID_PATH=""
@@ -52,24 +54,33 @@ jobs:
             fi
           done
           echo "Android SDK: $ANDROID_PATH"
-          ls "$ANDROID_PATH/build-tools/" 2>/dev/null || echo "no build-tools"
+          echo "Build tools:" && ls "$ANDROID_PATH/build-tools/" 2>/dev/null
+          echo "d8 check:" && find "$ANDROID_PATH" -name "d8" 2>/dev/null | head -3
 
           # Debug keystore
-          mkdir -p "$HOME/.android"
+          mkdir -p /root/.android
           keytool -genkey -v \
-            -keystore "$HOME/.android/debug.keystore" \
+            -keystore /root/.android/debug.keystore \
             -alias androiddebugkey \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=Debug,OU=Debug,O=Debug,L=Debug,ST=Debug,C=US" 2>/dev/null || true
 
-          # Editor settings (no leading whitespace!)
-          mkdir -p "$HOME/.config/godot"
-          printf '[gd_resource type="EditorSettings"]\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
-            "$JAVA_PATH" "$ANDROID_PATH" "$HOME" \
-            > "$HOME/.config/godot/editor_settings-4.6.tres"
+          # Editor settings (try both possible filenames)
+          mkdir -p /root/.config/godot
+          for fname in editor_settings-4.tres editor_settings-4.6.tres; do
+            printf '[gd_resource type="EditorSettings"]\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "/root/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
+              "$JAVA_PATH" "$ANDROID_PATH" \
+              > "/root/.config/godot/$fname"
+          done
           echo "=== Editor settings ==="
-          cat "$HOME/.config/godot/editor_settings-4.6.tres"
+          cat /root/.config/godot/editor_settings-4.tres
+
+          # Verify export_presets.cfg from repo
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
+          echo "=== hex check first line ==="
+          head -1 export_presets.cfg | xxd | head -2
 
       - name: Import project
         run: |
@@ -79,15 +90,16 @@ jobs:
       - name: Build APK
         run: |
           mkdir -p build
-          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
+          godot --headless --export-debug "Android" build/SpaceShooter.apk --verbose 2>&1 | tail -100
 
       - name: Verify
+        if: always()
         run: |
           if [ -f build/SpaceShooter.apk ]; then
             echo "빌드 성공! $(du -h build/SpaceShooter.apk | cut -f1)"
           else
             echo "빌드 실패"
-            find / -name "*.apk" 2>/dev/null || true
+            find / -name "*.apk" -not -path "*/export_templates/*" 2>/dev/null || true
             exit 1
           fi
 
