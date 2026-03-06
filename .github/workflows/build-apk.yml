@@ -16,50 +16,42 @@ jobs:
 
       - name: Setup
         run: |
-          # Install fontconfig
-          apt-get update && apt-get install -y fontconfig libfontconfig1 2>/dev/null || true
+          # Install fontconfig + JDK
+          apt-get update && apt-get install -y fontconfig libfontconfig1 default-jdk-headless 2>/dev/null || true
 
-          # Find where templates actually are in this container
-          echo "=== HOME is $HOME ==="
-          echo "=== Looking for android templates ==="
-          find / -name "android_debug.apk" 2>/dev/null || echo "no android_debug.apk found"
-          find / -name "android_release.apk" 2>/dev/null || echo "no android_release.apk found"
-          find / -path "*/export_templates/*" -type d 2>/dev/null | head -5
-
-          # Copy templates to where Godot actually looks ($HOME)
-          TEMPLATE_SRC=$(find / -name "android_debug.apk" -path "*/export_templates/*" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "")
+          # Templates: copy from /root to $HOME
+          TEMPLATE_SRC="/root/.local/share/godot/export_templates/4.6.1.stable"
           TEMPLATE_DST="$HOME/.local/share/godot/export_templates/4.6.1.stable"
           mkdir -p "$TEMPLATE_DST"
-          if [ -n "$TEMPLATE_SRC" ] && [ -d "$TEMPLATE_SRC" ]; then
-            echo "Found templates at: $TEMPLATE_SRC"
-            cp -r "$TEMPLATE_SRC"/* "$TEMPLATE_DST"/ 2>/dev/null || true
-            ln -sf "$TEMPLATE_SRC"/* "$TEMPLATE_DST"/ 2>/dev/null || true
-          else
-            echo "No templates found in container, checking /root..."
-            if [ -d "/root/.local/share/godot/export_templates" ]; then
-              SRC_DIR=$(ls /root/.local/share/godot/export_templates/ | head -1)
-              if [ -n "$SRC_DIR" ]; then
-                cp -r "/root/.local/share/godot/export_templates/$SRC_DIR"/* "$TEMPLATE_DST"/ 2>/dev/null || true
-              fi
-            fi
+          if [ -d "$TEMPLATE_SRC" ]; then
+            cp -r "$TEMPLATE_SRC"/* "$TEMPLATE_DST"/
+            echo "Templates copied from $TEMPLATE_SRC"
           fi
-          echo "=== Templates in dst ==="
-          ls -la "$TEMPLATE_DST"/ 2>/dev/null | head -10
+          ls "$TEMPLATE_DST"/android* 2>/dev/null || echo "WARNING: no android templates"
 
-          # Find Java SDK
-          JAVA_PATH=$(find / -name "javac" -type f 2>/dev/null | head -1 | xargs dirname 2>/dev/null | xargs dirname 2>/dev/null || echo "")
-          echo "=== Java SDK: $JAVA_PATH ==="
+          # Find Java SDK (need dir with bin/javac)
+          JAVA_PATH=""
+          for p in /usr/lib/jvm/java-17-openjdk-amd64 /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/default-java; do
+            if [ -f "$p/bin/javac" ]; then
+              JAVA_PATH="$p"
+              break
+            fi
+          done
+          if [ -z "$JAVA_PATH" ]; then
+            JAVA_PATH=$(dirname $(dirname $(readlink -f $(which javac 2>/dev/null) 2>/dev/null) 2>/dev/null) 2>/dev/null || echo "")
+          fi
+          echo "Java SDK: $JAVA_PATH"
+          ls "$JAVA_PATH/bin/javac" 2>/dev/null && echo "javac OK" || echo "WARNING: javac not found"
 
           # Find Android SDK
           ANDROID_PATH=""
-          for p in /root/android-sdk /opt/android-sdk /usr/lib/android-sdk "$ANDROID_HOME" "$ANDROID_SDK_ROOT"; do
-            if [ -d "$p" ] 2>/dev/null; then
+          for p in /usr/lib/android-sdk /root/android-sdk /opt/android-sdk; do
+            if [ -d "$p/build-tools" ]; then
               ANDROID_PATH="$p"
               break
             fi
           done
-          echo "=== Android SDK: $ANDROID_PATH ==="
-          echo "=== Build tools ==="
+          echo "Android SDK: $ANDROID_PATH"
           ls "$ANDROID_PATH/build-tools/" 2>/dev/null || echo "no build-tools"
 
           # Debug keystore
@@ -71,17 +63,11 @@ jobs:
             -storepass android -keypass android \
             -dname "CN=Debug,OU=Debug,O=Debug,L=Debug,ST=Debug,C=US" 2>/dev/null || true
 
-          # Editor settings - use $HOME so Godot finds them
+          # Editor settings (no leading whitespace!)
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.6.tres" << SETTINGS
-          [gd_resource type="EditorSettings"]
-          [resource]
-          export/android/java_sdk_path = "${JAVA_PATH:-/usr/lib/jvm/java-17-openjdk-amd64}"
-          export/android/android_sdk_path = "${ANDROID_PATH:-/root/android-sdk}"
-          export/android/debug_keystore = "$HOME/.android/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          SETTINGS
+          printf '[gd_resource type="EditorSettings"]\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
+            "$JAVA_PATH" "$ANDROID_PATH" "$HOME" \
+            > "$HOME/.config/godot/editor_settings-4.6.tres"
           echo "=== Editor settings ==="
           cat "$HOME/.config/godot/editor_settings-4.6.tres"
 
