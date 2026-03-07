@@ -29,13 +29,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android build tools
-        run: |
-          sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "platform-tools"
-          echo "=== build-tools contents ==="
-          ls $ANDROID_HOME/build-tools/34.0.0/ | head -20
-          echo "=== d8 check ==="
-          ls $ANDROID_HOME/build-tools/34.0.0/d8 2>/dev/null || echo "d8 not in build-tools"
-          find $ANDROID_HOME -name "d8" -type f 2>/dev/null
+        run: sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "platform-tools"
 
       - name: Create debug keystore
         run: |
@@ -53,14 +47,16 @@ jobs:
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
             "$JAVA_HOME" "$ANDROID_HOME" "$HOME" \
             > ~/.config/godot/editor_settings-4.6.tres
-          echo "=== Editor settings ==="
           cat ~/.config/godot/editor_settings-4.6.tres
-          echo "=== Templates ==="
-          ls ~/.local/share/godot/export_templates/ 2>/dev/null || echo "no templates dir"
-          find ~ -name "android_debug.apk" 2>/dev/null | head -3
 
-      - name: Fix export presets
-        run: sed -i 's/\r$//' export_presets.cfg && cat export_presets.cfg
+      - name: Create export preset
+        run: |
+          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path=""\nencryption_include_filters=""\nencryption_exclude_filters=""\nscript_export_mode=1\n\n[preset.0.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=true\narchitectures/arm64-v8a=true\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.game.spaceshooter"\npackage/name="SpaceShooter"\npackage/signed=false\nscreen/immersive_mode=true\nscreen/support_small=true\nscreen/support_normal=true\nscreen/support_large=true\nscreen/support_xlarge=true\n' > export_presets.cfg
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
+          echo "=== file check ==="
+          file export_presets.cfg
+          od -An -tx1 export_presets.cfg | head -3
 
       - name: Import project
         run: godot --headless --import 2>&1 || true
