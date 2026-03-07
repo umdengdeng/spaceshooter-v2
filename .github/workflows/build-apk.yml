@@ -6,57 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  android-export:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.6.1
-
-    env:
-      HOME: /root
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup
-        run: |
-          apt-get update && apt-get install -y fontconfig libfontconfig1 2>/dev/null || true
-          sed -i 's/\r$//' export_presets.cfg
-
-      - name: Import project
-        run: |
-          godot --headless --import 2>&1 || true
-          sleep 2
-
-      - name: Validate export config
-        run: |
-          sed -i 's/\r$//' check_export.gd
-          godot --headless --script res://check_export.gd 2>&1 || true
-
-      - name: Build APK
-        run: |
-          mkdir -p build
-          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
-
-      - name: Verify
-        if: always()
-        run: |
-          if [ -f build/SpaceShooter.apk ]; then
-            echo "APK 빌드 성공! $(du -h build/SpaceShooter.apk | cut -f1)"
-          else
-            echo "APK 빌드 실패"
-            exit 1
-          fi
+      - name: Godot Android Export
+        id: export
+        uses: dulvui/godot-android-export@v3.1.0
+        with:
+          godot-version: 4.6.1
+          working-directory: .
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SpaceShooter-APK
-          path: build/SpaceShooter.apk
-
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: build/SpaceShooter.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: ./**/*.apk
