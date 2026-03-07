@@ -49,18 +49,10 @@ jobs:
           echo "PCK size: $(du -h build/game.pck)"
           echo "PCK bytes: $PCK_SIZE"
 
-      - name: Build APK with embedded PCK
+      - name: Sign template APK
         run: |
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.6.1.stable"
 
-          # Embed PCK at end of APK using Godot's embed format
-          python3 .github/embed_pck.py \
-            "$TEMPLATE_DIR/android_debug.apk" \
-            build/game.pck \
-            build/SpaceShooter_unsigned.apk
-
-      - name: Sign and align APK
-        run: |
           keytool -genkeypair -v \
             -keystore debug.keystore \
             -alias androiddebugkey \
@@ -71,21 +63,31 @@ jobs:
           BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ 2>/dev/null | sort -V | tail -1)
           echo "Build tools: $BUILD_TOOLS"
 
-          # Sign first (v1 jarsigner for appended-PCK APK since zipalign may break the append)
-          jarsigner -keystore debug.keystore \
-            -storepass android -keypass android \
-            -signedjar build/SpaceShooter.apk \
-            build/SpaceShooter_unsigned.apk \
-            androiddebugkey
-          echo "signing done"
+          # Zipalign the template
+          ${BUILD_TOOLS}zipalign -f 4 "$TEMPLATE_DIR/android_debug.apk" build/template_aligned.apk
+
+          # Sign the template APK
+          ${BUILD_TOOLS}apksigner sign \
+            --ks debug.keystore \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            build/template_aligned.apk
+          echo "template signed"
+
+      - name: Embed PCK into signed APK
+        run: |
+          # Append PCK after signing - Godot reads PCK from end of file
+          python3 .github/embed_pck.py \
+            build/template_aligned.apk \
+            build/game.pck \
+            build/SpaceShooter.apk
 
       - name: Verify APK
         run: |
           APK=build/SpaceShooter.apk
           echo "APK: $APK"
           echo "Size: $(du -h $APK | cut -f1)"
-
-          jarsigner -verify $APK && echo "Signature: OK" || echo "Signature: FAILED"
 
           echo "--- PCK embed check ---"
           python3 .github/verify_pck_embed.py $APK
