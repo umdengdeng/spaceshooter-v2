@@ -42,9 +42,11 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.6.1.stable"
           cp "$TEMPLATE_DIR/android_debug.apk" build/SpaceShooter.apk
 
-          # Add PCK inside APK as a zip entry (preserves ZIP structure)
+          # Godot Android looks for PCK in assets/ inside the APK
           cd build
-          zip -0 SpaceShooter.apk game.pck
+          mkdir -p assets
+          cp game.pck assets/
+          zip -0 SpaceShooter.apk assets/game.pck
           echo "APK size: $(du -h SpaceShooter.apk | cut -f1)"
           echo "PCK size: $(du -h game.pck | cut -f1)"
 
@@ -89,9 +91,13 @@ jobs:
           BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ 2>/dev/null | sort -V | tail -1)
           ${BUILD_TOOLS}apksigner verify --print-certs $APK && echo "Signature: OK" || echo "Signature: FAILED"
 
+          # Check PCK is inside
+          echo "--- PCK check ---"
+          unzip -l $APK | grep -i pck && echo "PCK found in APK" || echo "WARNING: No PCK in APK!"
+
           # List APK contents
-          echo "--- APK contents (first 20) ---"
-          unzip -l $APK | head -20
+          echo "--- APK contents (first 25) ---"
+          unzip -l $APK | head -25
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
