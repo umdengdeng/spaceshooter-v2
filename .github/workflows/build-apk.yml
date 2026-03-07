@@ -42,10 +42,9 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.6.1.stable"
           cp "$TEMPLATE_DIR/android_debug.apk" build/SpaceShooter.apk
 
+          # Add PCK inside APK as a zip entry (preserves ZIP structure)
           cd build
-          # Append PCK to APK (Godot's embedding method)
-          cat game.pck >> SpaceShooter.apk
-
+          zip -0 SpaceShooter.apk game.pck
           echo "APK size: $(du -h SpaceShooter.apk | cut -f1)"
           echo "PCK size: $(du -h game.pck | cut -f1)"
 
@@ -63,7 +62,7 @@ jobs:
           BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ 2>/dev/null | sort -V | tail -1)
           echo "Build tools: $BUILD_TOOLS"
 
-          # Zipalign first (required before apksigner)
+          # Zipalign (required before apksigner)
           ${BUILD_TOOLS}zipalign -f 4 build/SpaceShooter.apk build/SpaceShooter_aligned.apk
           mv build/SpaceShooter_aligned.apk build/SpaceShooter.apk
           echo "zipalign done"
