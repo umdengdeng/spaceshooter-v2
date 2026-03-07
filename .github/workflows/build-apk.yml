@@ -19,52 +19,30 @@ jobs:
           use-dotnet: false
           include-templates: true
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android build tools
-        run: sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "platform-tools"
-
-      - name: Create debug keystore
+      - name: Create PCK export preset
         run: |
-          mkdir -p ~/.android
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Debug,OU=Debug,O=Debug,L=Debug,ST=Debug,C=US"
-
-      - name: Configure Godot editor settings
-        run: |
-          mkdir -p ~/.config/godot
-          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
-            "$JAVA_HOME" "$ANDROID_HOME" "$HOME" \
-            > ~/.config/godot/editor_settings-4.6.tres
-          cat ~/.config/godot/editor_settings-4.6.tres
-
-      - name: Create export preset
-        run: |
-          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path=""\nencryption_include_filters=""\nencryption_exclude_filters=""\nscript_export_mode=1\n\n[preset.0.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=true\narchitectures/arm64-v8a=true\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.game.spaceshooter"\npackage/name="SpaceShooter"\npackage/signed=false\nscreen/immersive_mode=true\nscreen/support_small=true\nscreen/support_normal=true\nscreen/support_large=true\nscreen/support_xlarge=true\n' > export_presets.cfg
-          echo "=== export_presets.cfg ==="
-          cat export_presets.cfg
-          echo "=== file check ==="
-          file export_presets.cfg
-          od -An -tx1 export_presets.cfg | head -3
+          printf '[preset.0]\n\nname="Linux"\nplatform="Linux"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path=""\nencryption_include_filters=""\nencryption_exclude_filters=""\nscript_export_mode=1\n\n[preset.0.options]\n\ncustom_template/debug=""\ncustom_template/release=""\nbinary_format/embed_pck=false\n' > export_presets.cfg
 
       - name: Import project
         run: godot --headless --import 2>&1 || true
 
-      - name: Build APK
+      - name: Export PCK
         run: |
           mkdir -p build
-          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
+          godot --headless --export-pack "Linux" build/game.pck 2>&1
+
+      - name: Build APK from template
+        run: |
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/4.6.1.stable"
+          cp "$TEMPLATE_DIR/android_debug.apk" build/SpaceShooter.apk
+
+          # Godot Android APK expects the PCK at the root of the APK as *.pck
+          cd build
+          # Godot embeds the PCK in the APK - we need to append it
+          cat game.pck >> SpaceShooter.apk
+
+          echo "APK size: $(du -h SpaceShooter.apk | cut -f1)"
+          echo "PCK size: $(du -h game.pck | cut -f1)"
 
       - name: Verify
         if: always()
