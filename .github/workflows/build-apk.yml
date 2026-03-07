@@ -60,6 +60,72 @@ jobs:
           name: SpaceShooter-APK
           path: build/SpaceShooter.apk
 
+      - name: Send APK via email
+        if: success()
+        run: |
+          python3 << 'PYEOF'
+          import smtplib, os, glob
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.base import MIMEBase
+          from email.mime.text import MIMEText
+          from email import encoders
+          from datetime import datetime
+
+          sender = os.environ.get('SENDER_EMAIL', '')
+          password = os.environ.get('SENDER_PASSWORD', '')
+          receiver = 'eomdeng@gmail.com'
+
+          if not sender or not password:
+              print('SENDER_EMAIL/SENDER_PASSWORD Secrets가 설정 안 됨')
+              print('GitHub repo > Settings > Secrets and variables > Actions 에서 설정 필요')
+              exit(0)
+
+          apk_files = glob.glob('**/*.apk', recursive=True)
+          if not apk_files:
+              print('APK 파일을 찾을 수 없음')
+              exit(1)
+
+          apk_path = apk_files[0]
+          print(f'APK 찾음: {apk_path}')
+
+          msg = MIMEMultipart()
+          msg['From'] = sender
+          msg['To'] = receiver
+          msg['Subject'] = f'[SpaceShooter] APK 빌드 완료 - {datetime.now().strftime("%Y-%m-%d %H:%M")}'
+
+          body = f"""SpaceShooter APK 빌드 완료!
+
+          빌드 시간: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+          APK 파일: {os.path.basename(apk_path)}
+          파일 크기: {os.path.getsize(apk_path) / 1024 / 1024:.1f} MB
+
+          설치 방법:
+          1. 첨부된 APK 다운로드
+          2. 폰에서 열기
+          3. "알 수 없는 앱 설치" 허용
+          4. 설치 완료
+          """
+          msg.attach(MIMEText(body, 'plain'))
+
+          with open(apk_path, 'rb') as f:
+              part = MIMEBase('application', 'vnd.android.package-archive')
+              part.set_payload(f.read())
+              encoders.encode_base64(part)
+              part.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(apk_path)}"')
+              msg.attach(part)
+
+          try:
+              with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+                  s.login(sender, password)
+                  s.send_message(msg)
+              print('이메일 발송 성공!')
+          except Exception as e:
+              print(f'이메일 발송 실패: {e}')
+          PYEOF
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
