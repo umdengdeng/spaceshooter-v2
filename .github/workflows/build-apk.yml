@@ -6,20 +6,90 @@ on:
   workflow_dispatch:
 
 jobs:
-  android-export:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Godot Android Export
-        id: export
-        uses: dulvui/godot-android-export@v3.1.0
+      - name: Setup Godot 4.6.1
+        uses: chickensoft-games/setup-godot@v2
         with:
-          godot-version: 4.6.1
-          working-directory: .
+          version: 4.6.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: |
+          sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+          echo "=== build-tools contents ==="
+          ls $ANDROID_HOME/build-tools/34.0.0/ | head -20
+          echo "=== d8 check ==="
+          ls $ANDROID_HOME/build-tools/34.0.0/d8 2>/dev/null || echo "d8 not in build-tools"
+          find $ANDROID_HOME -name "d8" -type f 2>/dev/null
+
+      - name: Create debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Debug,OU=Debug,O=Debug,L=Debug,ST=Debug,C=US"
+
+      - name: Configure Godot editor settings
+        run: |
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/.android/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
+            "$JAVA_HOME" "$ANDROID_HOME" "$HOME" \
+            > ~/.config/godot/editor_settings-4.6.tres
+          echo "=== Editor settings ==="
+          cat ~/.config/godot/editor_settings-4.6.tres
+          echo "=== Templates ==="
+          ls ~/.local/share/godot/export_templates/ 2>/dev/null || echo "no templates dir"
+          find ~ -name "android_debug.apk" 2>/dev/null | head -3
+
+      - name: Fix export presets
+        run: sed -i 's/\r$//' export_presets.cfg && cat export_presets.cfg
+
+      - name: Import project
+        run: godot --headless --import 2>&1 || true
+
+      - name: Build APK
+        run: |
+          mkdir -p build
+          godot --headless --export-debug "Android" build/SpaceShooter.apk 2>&1
+
+      - name: Verify
+        if: always()
+        run: |
+          if [ -f build/SpaceShooter.apk ]; then
+            echo "APK 빌드 성공! $(du -h build/SpaceShooter.apk | cut -f1)"
+          else
+            echo "APK 빌드 실패"
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SpaceShooter-APK
-          path: ./**/*.apk
+          path: build/SpaceShooter.apk
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/SpaceShooter.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
